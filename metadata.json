@@ -1,0 +1,5 @@
+{
+  "name": "AspectSense ABSA",
+  "description": "Scalable hybrid ABSA pipeline. Uses Gemini for zero-shot taxonomy discovery and local NLP for high-volume processing (10k+ reviews).",
+  "requestFramePermissions": []
+}
