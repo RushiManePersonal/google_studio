@@ -13,7 +13,7 @@
     "react-dom": "^19.2.3",
     "recharts": "^3.7.0",
     "react": "^19.2.3",
-    "vader-sentiment-forward": "^1.1.2"
+    "vader-sentiment-forward": "^1.1.2",
     "vader-sentiment": "^3.0.4"
   },
   "devDependencies": {
