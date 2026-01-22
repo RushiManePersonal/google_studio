@@ -10,11 +10,10 @@
   },
   "dependencies": {
     "@google/genai": "^1.38.0",
-    "react-dom": "^19.2.3",
-    "recharts": "^3.7.0",
-    "react": "^19.2.3",
-    "vader-sentiment-forward": "^1.1.2",
-    "vader-sentiment": "^3.0.4"
+    "react-dom": "18.2.0",
+    "recharts": "2.12.0",
+    "react": "18.2.0",
+    "vader-sentiment": "1.1.3"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

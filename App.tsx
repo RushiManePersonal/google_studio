@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { InputSection } from './components/InputSection';
 import { Dashboard } from './components/Dashboard';
+import { Methodology } from './components/Methodology';
 import { AnalysisResult, ReviewInput } from './types';
 import { discoverTaxonomy } from './services/geminiService';
-import { performLocalAnalysis } from './services/localAnalysis';
+import { performLocalAnalysis, extractTopFreqWords } from './services/localAnalysis';
 
 const App: React.FC = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -32,12 +33,25 @@ const App: React.FC = () => {
         id: `rev-${index + 1}`,
         text
       }));
+      
+      // Yield to UI to show "Preparing"
+      await new Promise(r => setTimeout(r, 100));
 
-      // 2. Sample Data for Gemini (Top 30 or fewer)
-      // This keeps API usage constant O(1) regardless of input size
-      setStatusText('Gemini: Learning aspect taxonomy from sample...');
-      const sampleSize = Math.min(30, reviews.length);
-      // Randomly sample if dataset is large, or just take first N
+      // 2. Vocabulary-Guided Discovery Strategy
+      // Step A: Global Frequency Analysis (Local)
+      // This is the "Smart" part: We scan ALL data to get the top terms (stats objects), 
+      // ensuring we don't miss aspects just because our Gemini sample is small.
+      // Now includes STEMMING to merge "flavor" and "flavors".
+      setStatusText(`Scanning ${reviews.length} reviews for global vocabulary signals...`);
+      const topWordStats = extractTopFreqWords(reviewObjects, 100); // Get top 100 stats {word, count}
+      // Extract just strings for the Prompt to Gemini
+      const topWordStrings = topWordStats.map(s => s.word);
+      
+      await new Promise(r => setTimeout(r, 100)); // UI Refresh
+
+      // Step B: Qualitative Sampling
+      // We still need full sentences to show Gemini *context*.
+      const sampleSize = Math.min(15, reviews.length);
       const sampleIndices = new Set<number>();
       while(sampleIndices.size < sampleSize) {
         sampleIndices.add(Math.floor(Math.random() * reviews.length));
@@ -45,10 +59,12 @@ const App: React.FC = () => {
       const sampleReviews = Array.from(sampleIndices).map(i => reviews[i]);
 
       // 3. Call Gemini (Discovery Phase)
-      const taxonomy = await discoverTaxonomy(sampleReviews);
+      // We pass BOTH the top frequent words (Global Context) and the sample reviews (Local Context)
+      setStatusText('Gemini: Discovering taxonomy from vocabulary & samples...');
+      const taxonomy = await discoverTaxonomy(sampleReviews, topWordStrings);
       
       // 4. Run Local Analysis (Scale Phase)
-      setStatusText(`Local: Analyzing ${reviews.length} reviews...`);
+      setStatusText(`Local: Applying taxonomy to ${reviews.length} reviews...`);
       const localResult = await performLocalAnalysis(
         reviewObjects, 
         taxonomy,
@@ -58,6 +74,7 @@ const App: React.FC = () => {
       setResult({
         reviews: localResult.reviews,
         aspects: localResult.stats,
+        topWords: topWordStats, // Pass the statistical proof to the dashboard
         taxonomySource: 'Gemini-ZeroShot',
         processedCount: reviews.length
       });
@@ -88,7 +105,7 @@ const App: React.FC = () => {
              </h1>
           </div>
           <div className="flex items-center gap-4">
-             <span className="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded">Hybrid Pipeline</span>
+             <span className="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded">Vocabulary-Guided Pipeline</span>
           </div>
         </div>
       </header>
@@ -117,10 +134,10 @@ const App: React.FC = () => {
           {!result && !isAnalyzing && (
             <div className="text-center py-10">
               <h2 className="text-3xl font-extrabold text-slate-900 sm:text-4xl">
-                Hybrid ABSA Pipeline
+                Smart ABSA Pipeline
               </h2>
               <p className="mt-4 max-w-2xl mx-auto text-xl text-slate-500">
-                Uses <span className="text-indigo-600 font-semibold">Gemini</span> for zero-shot discovery and <span className="text-indigo-600 font-semibold">Local VADER</span> for scale (10k+ rows).
+                Uses <span className="text-indigo-600 font-semibold">Global Vocabulary Stats</span> + <span className="text-indigo-600 font-semibold">Gemini</span> for accurate discovery at scale (50k+ rows).
               </p>
             </div>
           )}
@@ -153,6 +170,9 @@ const App: React.FC = () => {
 
           {/* Results Dashboard */}
           {result && <Dashboard result={result} />}
+          
+          {/* Detailed Explanation */}
+          <Methodology />
         </div>
       </main>
     </div>

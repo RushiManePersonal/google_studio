@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AnalysisResult, AnalyzedReview, AspectStats, SentimentLabel } from '../types';
+import { AnalysisResult, AnalyzedReview, AspectStats, SentimentLabel, WordStat } from '../types';
 import { AspectChart } from './AspectChart';
 
 interface DashboardProps {
@@ -31,7 +31,45 @@ export const Dashboard: React.FC<DashboardProps> = ({ result }) => {
   return (
     <div className="animate-fade-in space-y-8">
       
-      {/* Top Metrics Cards */}
+      {/* SECTION 1: STATISTICAL PROOF (DATA SIGNALS) */}
+      {/* This makes the analysis interpretable by showing the inputs that led to the taxonomy */}
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+        <div className="mb-4">
+            <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Corpus Signals (The Proof)
+            </h3>
+            <p className="text-sm text-slate-500">
+                These are the most frequent significant nouns found in your {result.processedCount.toLocaleString()} reviews. 
+                Our AI used these exact signals to discover the categories below.
+            </p>
+        </div>
+        
+        <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto pr-2">
+            {result.topWords.slice(0, 60).map((stat: WordStat, idx) => {
+                // Visual weighting based on frequency rank
+                const opacity = Math.max(0.4, 1 - (idx / 60));
+                const scale = idx < 5 ? 'text-base font-bold' : idx < 20 ? 'text-sm font-medium' : 'text-xs';
+                
+                return (
+                    <div 
+                        key={stat.word} 
+                        className={`px-3 py-1 rounded bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-2 ${scale}`}
+                        style={{ opacity }}
+                    >
+                        <span>{stat.word}</span>
+                        <span className="bg-white px-1.5 rounded text-[10px] text-slate-400 font-mono shadow-sm">
+                            {stat.count}
+                        </span>
+                    </div>
+                );
+            })}
+        </div>
+      </div>
+
+      {/* SECTION 2: SENTIMENT METRICS */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <p className="text-sm font-medium text-slate-500">Reviews Analyzed</p>
@@ -98,7 +136,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ result }) => {
                         <div className="bg-slate-50 p-2 rounded text-slate-700 font-medium">{stats.neutral} Neu</div>
                       </div>
                       <div>
-                        <h4 className="text-sm font-medium text-slate-700 mb-2">Discovery Keywords (Gemini)</h4>
+                        <h4 className="text-sm font-medium text-slate-700 mb-2">Definition Keywords</h4>
+                        <p className="text-xs text-slate-500 mb-2">These terms were used to scan the reviews.</p>
                         <div className="flex flex-wrap gap-2">
                           {(stats.keywords || []).map(k => (
                             <span key={k} className="px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-full border border-indigo-100">
@@ -108,10 +147,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ result }) => {
                         </div>
                       </div>
                       <div className="bg-slate-50 p-4 rounded-lg text-sm text-slate-600">
-                         <p className="text-xs uppercase font-bold text-slate-400 mb-1">Context</p>
+                         <p className="text-xs uppercase font-bold text-slate-400 mb-1">Interpretation</p>
                          <p>
-                           Based on the analysis of {stats.count} segments, this aspect has a 
-                           {stats.net_sentiment > 0.2 ? ' generally positive' : stats.net_sentiment < -0.2 ? ' generally negative' : ' mixed'} perception.
+                           Reviews mentioning this aspect tend to be 
+                           <span className={`font-semibold ${stats.net_sentiment > 0.2 ? ' text-green-600' : stats.net_sentiment < -0.2 ? ' text-red-600' : ' text-slate-600'}`}>
+                             {stats.net_sentiment > 0.2 ? ' Positive' : stats.net_sentiment < -0.2 ? ' Negative' : ' Mixed/Neutral'}
+                           </span>.
+                           Calculated from {stats.count} distinct text segments.
                          </p>
                       </div>
                      </>
@@ -147,11 +189,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ result }) => {
         </div>
       </div>
 
-      {/* Detailed Reviews List with Pagination */}
+      {/* SECTION 3: REVIEWS WITH TRACEABILITY */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-center gap-4">
           <h3 className="text-lg font-bold text-slate-900">
-            {selectedAspect ? `Reviews mentioning "${selectedAspect}"` : 'Analysis Breakdown'}
+            {selectedAspect ? `Reviews mentioning "${selectedAspect}"` : 'Review Analysis Breakdown'}
           </h3>
           <div className="flex items-center gap-4">
             <span className="text-xs font-mono text-slate-400 bg-white border border-slate-200 px-2 py-1 rounded">
@@ -183,21 +225,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ result }) => {
           {displayReviews.map((review) => (
             <div key={review.review_id} className="p-6 hover:bg-slate-50 transition-colors">
               <div className="mb-3">
-                <p className="text-slate-800 leading-relaxed text-sm sm:text-base">"{review.original_text}"</p>
+                <p className="text-slate-800 leading-relaxed text-sm sm:text-base font-serif">"{review.original_text}"</p>
               </div>
               <div className="flex flex-wrap gap-2 mt-2">
                 {review.segments
                   .filter(s => !selectedAspect || s.aspect_category === selectedAspect)
                   .map((segment, idx) => (
                   <div key={idx} className={`
-                    flex items-center gap-2 px-3 py-1.5 rounded-md border text-xs sm:text-sm
-                    ${segment.sentiment === SentimentLabel.POSITIVE ? 'bg-green-50 border-green-100 text-green-800' : 
-                      segment.sentiment === SentimentLabel.NEGATIVE ? 'bg-red-50 border-red-100 text-red-800' : 
-                      'bg-slate-50 border-slate-200 text-slate-700'}
+                    flex flex-col gap-1 px-3 py-2 rounded-md border text-xs sm:text-sm
+                    ${segment.sentiment === SentimentLabel.POSITIVE ? 'bg-green-50 border-green-100 text-green-900' : 
+                      segment.sentiment === SentimentLabel.NEGATIVE ? 'bg-red-50 border-red-100 text-red-900' : 
+                      'bg-slate-50 border-slate-200 text-slate-900'}
                   `}>
-                    <span className="font-semibold">{segment.aspect_category}:</span>
-                    <span>{segment.segment_text}</span>
-                    <span className="opacity-60 ml-1 font-mono text-[10px]">({segment.sentiment_score.toFixed(2)})</span>
+                    <div className="flex items-center gap-2">
+                         <span className="font-bold uppercase text-[10px] tracking-wide opacity-70">{segment.aspect_category}</span>
+                         <span className={`px-1 rounded text-[10px] border ${
+                            segment.sentiment === SentimentLabel.POSITIVE ? 'border-green-200 bg-green-100' :
+                            segment.sentiment === SentimentLabel.NEGATIVE ? 'border-red-200 bg-red-100' : 'border-slate-200 bg-slate-100'
+                         }`}>
+                             {segment.sentiment_score.toFixed(2)}
+                         </span>
+                    </div>
+                    <div>
+                        <span className="italic">"...{segment.segment_text}..."</span>
+                    </div>
+                    <div className="mt-1 pt-1 border-t border-black/5 text-[10px] opacity-70">
+                        Triggered by: <span className="font-mono font-bold">{segment.trigger_word}</span>
+                    </div>
                   </div>
                 ))}
               </div>

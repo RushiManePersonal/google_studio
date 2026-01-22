@@ -15,6 +15,7 @@ export interface AspectSegment {
   sentiment: SentimentLabel;
   sentiment_score: number; // -1 to 1
   reasoning: string;
+  trigger_word: string; // The exact word that caused this classification
 }
 
 export interface AnalyzedReview {
@@ -39,9 +40,15 @@ export interface AspectStats {
   keywords: string[];
 }
 
+export interface WordStat {
+  word: string;
+  count: number;
+}
+
 export interface AnalysisResult {
   reviews: AnalyzedReview[];
   aspects: AspectStats[];
+  topWords: WordStat[]; // The statistical proof
   taxonomySource: 'Gemini-ZeroShot' | 'Pre-defined';
   processedCount: number;
 }
