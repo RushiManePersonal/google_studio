@@ -21,35 +21,75 @@ export const Dashboard: React.FC<DashboardProps> = ({ result }) => {
 
   // Calculate high-level metrics
   const totalSegments = result.aspects.reduce((acc, curr) => acc + curr.count, 0);
-  const avgSentiment = result.aspects.reduce((acc, curr) => acc + (curr.net_sentiment * curr.count), 0) / (totalSegments || 1);
+  // Weighted Average for Global Sentiment
+  const globalSentimentNum = result.aspects.reduce((acc, curr) => acc + (curr.net_sentiment * curr.count), 0);
+  const avgSentiment = totalSegments > 0 ? globalSentimentNum / totalSegments : 0;
 
   const handleAspectClick = (aspect: string) => {
     setSelectedAspect(aspect);
     setPage(1); // Reset to page 1 on filter change
   }
 
+  // Helper to determine if an aspect is "Mixed"
+  const getAspectSentimentStatus = (stats: AspectStats) => {
+    const total = stats.count;
+    if (total === 0) return { label: 'Neutral', color: 'text-slate-500' };
+
+    // If both Positive and Negative are significant (>15% each), it's mixed
+    const posRatio = stats.positive / total;
+    const negRatio = stats.negative / total;
+    
+    if (posRatio > 0.15 && negRatio > 0.15) {
+      return { 
+        label: 'Mixed', 
+        color: 'text-amber-600', 
+        bg: 'bg-amber-100',
+        borderColor: 'border-amber-200' 
+      };
+    }
+
+    if (stats.net_sentiment > 0.1) return { label: 'Positive', color: 'text-green-600', bg: 'bg-green-100', borderColor: 'border-green-200' };
+    if (stats.net_sentiment < -0.1) return { label: 'Negative', color: 'text-red-600', bg: 'bg-red-100', borderColor: 'border-red-200' };
+    return { label: 'Neutral', color: 'text-slate-500', bg: 'bg-slate-100', borderColor: 'border-slate-200' };
+  };
+
   return (
     <div className="animate-fade-in space-y-8">
       
+      {/* WARNINGS SECTION */}
+      {result.warnings && result.warnings.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <h3 className="text-amber-800 font-bold flex items-center gap-2 mb-2">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            Dataset Integrity Warnings
+          </h3>
+          <ul className="list-disc list-inside text-sm text-amber-700">
+            {result.warnings.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* SECTION 1: STATISTICAL PROOF (DATA SIGNALS) */}
-      {/* This makes the analysis interpretable by showing the inputs that led to the taxonomy */}
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <div className="mb-4">
             <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
-                Corpus Signals (The Proof)
+                Corpus Signals (Token Frequency × Document Coverage)
             </h3>
             <p className="text-sm text-slate-500">
-                These are the most frequent significant nouns found in your {result.processedCount.toLocaleString()} reviews. 
-                Our AI used these exact signals to discover the categories below.
+                These are the top nouns/phrases weighted by their <strong>Signal Strength</strong>. 
+                Words that appear frequently but only in a few reviews (spam/repetition) are penalized.
             </p>
         </div>
         
         <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto pr-2">
             {result.topWords.slice(0, 60).map((stat: WordStat, idx) => {
-                // Visual weighting based on frequency rank
                 const opacity = Math.max(0.4, 1 - (idx / 60));
                 const scale = idx < 5 ? 'text-base font-bold' : idx < 20 ? 'text-sm font-medium' : 'text-xs';
                 
@@ -58,6 +98,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ result }) => {
                         key={stat.word} 
                         className={`px-3 py-1 rounded bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-2 ${scale}`}
                         style={{ opacity }}
+                        title={`Score: ${stat.score.toFixed(1)}`}
                     >
                         <span>{stat.word}</span>
                         <span className="bg-white px-1.5 rounded text-[10px] text-slate-400 font-mono shadow-sm">
@@ -72,21 +113,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ result }) => {
       {/* SECTION 2: SENTIMENT METRICS */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <p className="text-sm font-medium text-slate-500">Reviews Analyzed</p>
+          <p className="text-sm font-medium text-slate-500">Total Reviews Analyzed</p>
           <p className="text-2xl font-bold text-slate-900 mt-1">{result.processedCount.toLocaleString()}</p>
         </div>
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <p className="text-sm font-medium text-slate-500">Aspects Detected</p>
+          <p className="text-sm font-medium text-slate-500">Aspects Discovered</p>
           <p className="text-2xl font-bold text-slate-900 mt-1">{result.aspects.length}</p>
         </div>
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <p className="text-sm font-medium text-slate-500">Mentions Found</p>
+          <p className="text-sm font-medium text-slate-500">Specific Mentions (Clauses)</p>
           <p className="text-2xl font-bold text-slate-900 mt-1">{totalSegments.toLocaleString()}</p>
         </div>
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <p className="text-sm font-medium text-slate-500">Net Sentiment</p>
+          <p className="text-sm font-medium text-slate-500">Weighted Avg Sentiment</p>
           <div className="flex items-center gap-2 mt-1">
-            <p className={`text-2xl font-bold ${avgSentiment > 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <p className={`text-2xl font-bold ${avgSentiment > 0.05 ? 'text-green-600' : avgSentiment < -0.05 ? 'text-red-600' : 'text-slate-600'}`}>
               {avgSentiment > 0 ? '+' : ''}{avgSentiment.toFixed(2)}
             </p>
           </div>
@@ -128,6 +169,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ result }) => {
                  {(() => {
                    const stats = result.aspects.find(a => a.name === selectedAspect);
                    if (!stats) return null;
+                   const status = getAspectSentimentStatus(stats);
+                   
                    return (
                      <>
                       <div className="grid grid-cols-3 gap-2 text-center text-sm">
@@ -135,26 +178,39 @@ export const Dashboard: React.FC<DashboardProps> = ({ result }) => {
                         <div className="bg-red-50 p-2 rounded text-red-700 font-medium">{stats.negative} Neg</div>
                         <div className="bg-slate-50 p-2 rounded text-slate-700 font-medium">{stats.neutral} Neu</div>
                       </div>
+                      
+                      <div className="flex items-center gap-4 bg-indigo-50 p-3 rounded-lg border border-indigo-100">
+                        <div>
+                            <p className="text-xs text-indigo-500 uppercase font-bold">Total Mentions</p>
+                            <p className="text-lg font-bold text-indigo-700">{stats.count}</p>
+                            <p className="text-[10px] text-indigo-400">Clauses</p>
+                        </div>
+                        <div className="w-px h-8 bg-indigo-200"></div>
+                        <div>
+                            <p className="text-xs text-indigo-500 uppercase font-bold">Review Coverage</p>
+                            <p className="text-lg font-bold text-indigo-700">{stats.reviewCount}</p>
+                            <p className="text-[10px] text-indigo-400">Documents</p>
+                        </div>
+                         <div className="w-px h-8 bg-indigo-200"></div>
+                        <div>
+                             <p className="text-xs text-indigo-500 uppercase font-bold">Confidence</p>
+                             <p className={`text-lg font-bold ${stats.confidence > 0.6 ? 'text-green-600' : 'text-amber-500'}`}>
+                                {(stats.confidence * 100).toFixed(0)}%
+                             </p>
+                             <p className="text-[10px] text-indigo-400">Reliability</p>
+                        </div>
+                      </div>
+
                       <div>
                         <h4 className="text-sm font-medium text-slate-700 mb-2">Definition Keywords</h4>
-                        <p className="text-xs text-slate-500 mb-2">These terms were used to scan the reviews.</p>
+                        <p className="text-xs text-slate-500 mb-2">Words that trigger this aspect (Longer matches prioritized):</p>
                         <div className="flex flex-wrap gap-2">
                           {(stats.keywords || []).map(k => (
-                            <span key={k} className="px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-full border border-indigo-100">
+                            <span key={k} className="px-2.5 py-1 bg-slate-100 text-slate-700 text-xs rounded-full border border-slate-200">
                               {k}
                             </span>
                           ))}
                         </div>
-                      </div>
-                      <div className="bg-slate-50 p-4 rounded-lg text-sm text-slate-600">
-                         <p className="text-xs uppercase font-bold text-slate-400 mb-1">Interpretation</p>
-                         <p>
-                           Reviews mentioning this aspect tend to be 
-                           <span className={`font-semibold ${stats.net_sentiment > 0.2 ? ' text-green-600' : stats.net_sentiment < -0.2 ? ' text-red-600' : ' text-slate-600'}`}>
-                             {stats.net_sentiment > 0.2 ? ' Positive' : stats.net_sentiment < -0.2 ? ' Negative' : ' Mixed/Neutral'}
-                           </span>.
-                           Calculated from {stats.count} distinct text segments.
-                         </p>
                       </div>
                      </>
                    )
@@ -162,27 +218,40 @@ export const Dashboard: React.FC<DashboardProps> = ({ result }) => {
               </div>
             ) : (
                <div className="grid grid-cols-1 gap-3">
-                 {result.aspects.map(aspect => (
-                   <div 
-                    key={aspect.name} 
-                    onClick={() => handleAspectClick(aspect.name)}
-                    className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 cursor-pointer border border-transparent hover:border-slate-200 transition-all group"
-                   >
-                     <div className="flex items-center gap-3">
-                        <div className="w-2 h-8 bg-indigo-500 rounded-full opacity-20 group-hover:opacity-100 transition-opacity" />
-                        <div>
-                          <p className="font-medium text-slate-800">{aspect.name}</p>
-                          <p className="text-xs text-slate-500">{(aspect.keywords || []).slice(0,3).join(', ')}</p>
-                        </div>
-                     </div>
-                     <div className="text-right">
-                       <span className={`text-sm font-bold ${aspect.net_sentiment > 0 ? 'text-green-600' : aspect.net_sentiment < 0 ? 'text-red-600' : 'text-slate-500'}`}>
-                         {aspect.net_sentiment > 0 ? '+' : ''}{aspect.net_sentiment.toFixed(2)}
-                       </span>
-                       <p className="text-xs text-slate-400">{aspect.count} segs</p>
-                     </div>
-                   </div>
-                 ))}
+                 {result.aspects.map(aspect => {
+                    const status = getAspectSentimentStatus(aspect);
+                    return (
+                       <div 
+                        key={aspect.name} 
+                        onClick={() => handleAspectClick(aspect.name)}
+                        className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 cursor-pointer border border-transparent hover:border-slate-200 transition-all group"
+                       >
+                         <div className="flex items-center gap-3">
+                            <div className="w-2 h-8 bg-indigo-500 rounded-full opacity-20 group-hover:opacity-100 transition-opacity" />
+                            <div>
+                              <p className="font-medium text-slate-800 flex items-center gap-2">
+                                {aspect.name}
+                                {status.label === 'Mixed' && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200 font-bold">
+                                        Mixed
+                                    </span>
+                                )}
+                              </p>
+                              <div className="flex items-center gap-2 text-xs text-slate-500">
+                                <span className="font-semibold">{aspect.reviewCount}</span> docs
+                                <span className="text-slate-300">|</span>
+                                <span title="Confidence Score">{(aspect.confidence * 100).toFixed(0)}% conf</span>
+                              </div>
+                            </div>
+                         </div>
+                         <div className="text-right">
+                           <span className={`text-sm font-bold ${aspect.net_sentiment > 0.1 ? 'text-green-600' : aspect.net_sentiment < -0.1 ? 'text-red-600' : 'text-slate-500'}`}>
+                             {aspect.net_sentiment > 0 ? '+' : ''}{aspect.net_sentiment.toFixed(2)}
+                           </span>
+                         </div>
+                       </div>
+                    );
+                 })}
                </div>
             )}
           </div>
@@ -197,7 +266,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ result }) => {
           </h3>
           <div className="flex items-center gap-4">
             <span className="text-xs font-mono text-slate-400 bg-white border border-slate-200 px-2 py-1 rounded">
-              {filteredReviews.length} matches
+              {filteredReviews.length} documents
             </span>
             {/* Simple Pagination Controls */}
             {totalPages > 1 && (

@@ -4,7 +4,7 @@ import { Dashboard } from './components/Dashboard';
 import { Methodology } from './components/Methodology';
 import { AnalysisResult, ReviewInput } from './types';
 import { discoverTaxonomy } from './services/geminiService';
-import { performLocalAnalysis, extractTopFreqWords } from './services/localAnalysis';
+import { performLocalAnalysis, extractTopFreqWords, checkDatasetIntegrity } from './services/localAnalysis';
 
 const App: React.FC = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -41,16 +41,17 @@ const App: React.FC = () => {
       // Step A: Global Frequency Analysis (Local)
       // This is the "Smart" part: We scan ALL data to get the top terms (stats objects), 
       // ensuring we don't miss aspects just because our Gemini sample is small.
-      // Now includes STEMMING to merge "flavor" and "flavors".
       setStatusText(`Scanning ${reviews.length} reviews for global vocabulary signals...`);
-      const topWordStats = extractTopFreqWords(reviewObjects, 100); // Get top 100 stats {word, count}
+      const topWordStats = extractTopFreqWords(reviewObjects, 100); 
       // Extract just strings for the Prompt to Gemini
       const topWordStrings = topWordStats.map(s => s.word);
       
+      // Perform Data Integrity Check
+      const dataWarnings = checkDatasetIntegrity(reviewObjects, topWordStats);
+
       await new Promise(r => setTimeout(r, 100)); // UI Refresh
 
       // Step B: Qualitative Sampling
-      // We still need full sentences to show Gemini *context*.
       const sampleSize = Math.min(15, reviews.length);
       const sampleIndices = new Set<number>();
       while(sampleIndices.size < sampleSize) {
@@ -60,7 +61,7 @@ const App: React.FC = () => {
 
       // 3. Call Gemini (Discovery Phase)
       // We pass BOTH the top frequent words (Global Context) and the sample reviews (Local Context)
-      setStatusText('Gemini: Discovering taxonomy from vocabulary & samples...');
+      setStatusText('Gemini: Discovering taxonomy from weighted signals & samples...');
       const taxonomy = await discoverTaxonomy(sampleReviews, topWordStrings);
       
       // 4. Run Local Analysis (Scale Phase)
@@ -76,7 +77,8 @@ const App: React.FC = () => {
         aspects: localResult.stats,
         topWords: topWordStats, // Pass the statistical proof to the dashboard
         taxonomySource: 'Gemini-ZeroShot',
-        processedCount: reviews.length
+        processedCount: reviews.length,
+        warnings: dataWarnings
       });
 
     } catch (err: any) {
